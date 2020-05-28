@@ -1,0 +1,112 @@
+---
+title: "Prediction Assignment"
+author: "Jenny Biechele-Speziale"
+date: "5/26/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load & Clean Data:
+
+The data was loaded from the following links:
+
+  train data: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+  test data: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+Columns that were empty or had time data or window data were disregarded from the models, since this analysis does not require any time step data.
+
+```{r, warning=FALSE, message=FALSE}
+#load data
+library(readr)
+pml_training <- read_csv("~/Downloads/pml-training.csv")
+pml_testing <- read_csv("~/Downloads/pml-testing.csv")
+#get rid of NA columns, get rid of time stamp data and window data
+features<-names(pml_testing[,colSums(is.na(pml_testing))==0])[8:59]
+DTtraining<-pml_training[,c(features,"classe")]
+DTtesting<-pml_testing[,c(features,"problem_id")]
+```
+
+# Split Data
+
+The train dataset (DTtraining) from above was split into a 60% training data set and a 40% testing set. The DTtesting dataset was not used for the data splitting, because that will be used for later predictions.
+
+```{r, message=FALSE, warning=FALSE}
+library(caret)
+set.seed(54)
+inTrain<-createDataPartition(DTtraining$classe,p=0.6,list=FALSE)
+training<-DTtraining[inTrain,]
+testing<-DTtraining[-inTrain,]
+```
+
+# Analysis
+
+For this assignment, various tree classifiers were used to solve this problem. I performed basic decision tree, boosted tree, and random forest models. Tree models were chosen because of their good performance with non-linear models, as well as their ease of implementation into R. 
+
+To reduce overfitting, a 10-fold cross-validation was used with the decision tree and boosted tree, but was not used in the random forest model, since cross-validation is not necessary for this model type.
+
+## Basic Decision Tree Model and Prediction
+
+The in-sample accuracy of the decision tree model is 72.5%. An in-sample accuracy this low means that we'll likely also get a low accuracy for the out-of-sample data.
+
+```{r, message=FALSE, warning=FALSE}
+library(rpart)
+library(rpart.plot)
+library(rattle)
+set.seed(54)
+modFitDT<-rpart(classe~.,data=training,method="class",control = rpart.control(method="cv",number=10))
+#in-sample predictions
+predDTis<-predict(modFitDT,testing,type="class")
+confusionMatrix(predDTis,as.factor(testing$classe))
+#out-of-sample predictions
+predDToos<-predict(modFitDT,DTtesting)
+```
+
+## Boosting Model and Prediction
+
+The in-sample accuracy from the boosted tree model is 95.8%. This model will likely perform well on the out-of-sample prediction.
+
+```{r, message=FALSE, warning=FALSE}
+library(gbm)
+set.seed(54)
+modFitB<-train(classe ~ ., method = "gbm", data = training,verbose=FALSE,trControl=trainControl(method="cv",number=10))
+modFitB
+plot(modFitB)
+#in-sample prediction
+predBis<-predict(modFitB,testing)
+confusionMatrix(predBis,as.factor(testing$classe))
+#out of sample prediction
+predBoos<-predict(modFitB,DTtesting)
+```
+
+## Random Forest Model and Prediction
+
+The in-sample accuracy on this model was 99.4%. ample as well.
+
+```{r, message=FALSE, warning=FALSE}
+library(randomForest)
+set.seed(54)
+modFitRF<-randomForest(as.factor(classe) ~ ., data = training, method = "rf", importance = TRUE)
+plot(modFitRF)
+#in-sample predictions
+predRF<-predict(modFitRF,testing,type="class")
+confusionMatrix(predRF,as.factor(testing$classe))
+#out-of-sample predictions
+predRFoos<-predict(modFitRF,DTtesting)
+```
+
+# Prediction (out-of-sample)
+
+The out-of-sample predictions are as follows for each of the models:
+
+```{r, warning=FALSE}
+predDToos
+predBoos
+predRFoos
+predBoos==predRFoos
+```
+
+Both the boosted and random forest models get the exact same (and correct) prediction on the DTtesting set. 
